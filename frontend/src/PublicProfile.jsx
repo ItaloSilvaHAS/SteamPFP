@@ -3,7 +3,8 @@ import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000';
+// Define a URL base do backend de forma dinâmica para funcionar localmente e na nuvem
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 function PublicProfile() {
   const { slug } = useParams();
@@ -19,7 +20,7 @@ function PublicProfile() {
         } else {
           setError(res.data.message || 'Perfil não encontrado.');
         }
-        setLoading(false);
+        loading(false);
       })
       .catch((err) => {
         setError(err.response?.data?.message || 'Erro ao carregar vitrine.');

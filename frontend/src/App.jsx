@@ -6,8 +6,8 @@ import PublicProfile from './PublicProfile';
 
 axios.defaults.withCredentials = true;
 
-// Define a URL base do backend
-const API_BASE_URL = 'http://localhost:5000';
+// Define a URL base do backend de forma dinâmica para funcionar localmente e na nuvem
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -106,7 +106,7 @@ function App() {
     matrix: {
       card: "border-green-500/30 shadow-green-950/20",
       line: "from-transparent via-green-500 to-transparent",
-      text: "text-green- green-400"
+      text: "text-green-400"
     },
     blood: {
       card: "border-red-600/30 shadow-red-950/20",
