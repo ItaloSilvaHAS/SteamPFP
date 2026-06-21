@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 
@@ -13,17 +13,21 @@ function PublicProfile() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    axios.get(`${API_BASE_URL}/api/profile/public/${slug}`)
+    // Limpa e normaliza o slug recebido pela URL para evitar problemas de digitação
+    const cleanSlug = slug ? slug.toLowerCase().trim() : '';
+
+    axios.get(`${API_BASE_URL}/api/profile/public/${cleanSlug}`)
       .then(res => {
-        if (res.data.success) {
+        if (res.data.success && res.data.profile) {
           setProfileData(res.data.profile);
         } else {
-          setError(res.data.message || 'Perfil não encontrado.');
+          setError(res.data.message || 'Perfil não encontrado na Matrix.');
         }
-        loading(false);
+        setLoading(false); // Corrigido de 'loading(false)' para 'setLoading(false)'
       })
       .catch((err) => {
-        setError(err.response?.data?.message || 'Erro ao carregar vitrine.');
+        console.error("Erro na requisição pública:", err);
+        setError(err.response?.data?.message || 'Erro ao conectar com o servidor da vitrine.');
         setLoading(false);
       });
   }, [slug]);
@@ -70,15 +74,19 @@ function PublicProfile() {
     );
   }
 
-  if (error) {
+  if (error || !profileData) {
     return (
       <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#0a0a0c] text-red-400 p-4 text-center font-mono">
         <h1 className="text-2xl font-black mb-2">404 // MATRIX_ERROR</h1>
-        <p className="text-sm text-slate-400">{error}</p>
+        <p className="text-sm text-slate-400 mb-6">{error || 'Dados inválidos recebidos do servidor.'}</p>
+        <Link to="/" className="text-xs bg-slate-900 border border-slate-800 hover:border-slate-700 px-4 py-2 rounded-lg text-slate-300 transition-all">
+          [ Voltar ao Início ]
+        </Link>
       </div>
     );
   }
 
+  // Define o estilo ativo garantindo fallback caso o tema vindo do banco não exista
   const activeStyle = themeStyles[profileData.theme] || themeStyles.cyberpunk;
 
   return (
@@ -97,20 +105,20 @@ function PublicProfile() {
             <div className="relative group">
               <div className={`absolute -inset-0.5 bg-gradient-to-r ${activeStyle.glow} rounded-xl blur opacity-60`} />
               <img 
-                src={profileData.avatar} 
+                src={profileData.avatar || 'https://via.placeholder.com/150'} 
                 alt="Profile Avatar" 
                 className="relative w-24 h-24 rounded-xl object-cover border border-black"
               />
             </div>
 
             <div className="text-center sm:text-left flex-1">
-              <h2 className="text-2xl font-black text-white tracking-wide font-mono">{profileData.nickname}</h2>
+              <h2 className="text-2xl font-black text-white tracking-wide font-mono">{profileData.nickname || 'Usuário'}</h2>
               <p className={`text-xs font-mono mt-1 ${activeStyle.text}`}>USER PROFILE // VERIFIED</p>
               
               <div className="flex flex-wrap justify-center sm:justify-start gap-4 mt-4">
                 <div className="bg-[#171721] border border-slate-800 px-3 py-1.5 rounded-lg text-center min-w-[70px]">
                   <span className="block text-[10px] uppercase tracking-wider text-slate-500 font-bold">Nível</span>
-                  <span className={`text-sm font-black font-mono ${activeStyle.text}`}>{profileData.level}</span>
+                  <span className={`text-sm font-black font-mono ${activeStyle.text}`}>{profileData.level ?? 0}</span>
                 </div>
                 <div className="bg-[#171721] border border-slate-800 px-3 py-1.5 rounded-lg text-center">
                   <span className="block text-[10px] uppercase tracking-wider text-slate-500 font-bold">Membro desde</span>
@@ -157,9 +165,9 @@ function PublicProfile() {
         </div>
 
         <div className="text-center">
-          <a href="/" className="text-xs text-slate-500 hover:text-blue-400 transition-colors font-mono">
+          <Link to="/" className="text-xs text-slate-500 hover:text-blue-400 transition-colors font-mono">
             [ Crie sua própria vitrine no SteamPFP ]
-          </a>
+          </Link>
         </div>
       </div>
     </div>
