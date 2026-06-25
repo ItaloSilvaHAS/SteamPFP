@@ -2,176 +2,270 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axios from 'axios';
+import { getTheme } from './themes';
+import BackgroundEffect from './components/BackgroundEffect';
+import StatusBadge from './components/StatusBadge';
+import AvatarDisplay from './components/AvatarDisplay';
+import GameBentoGrid from './components/GameBentoGrid';
+import MusicPlayer from './components/MusicPlayer';
+import AchievementsSection from './components/AchievementsSection';
+import GotySection from './components/GotySection';
 
-// Define a URL base do backend de forma dinâmica para funcionar localmente e na nuvem
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-function PublicProfile() {
+function StatPill({ label, value, theme: t }) {
+  return (
+    <div className="flex flex-col items-center px-5 py-3 rounded-2xl border"
+      style={{ background: t.cardBg, borderColor: t.cardBorder }}>
+      <p className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: t.textSecondary }}>{label}</p>
+      <p className="text-lg font-black font-mono tabular-nums" style={{ color: t.textAccent }}>{value}</p>
+    </div>
+  );
+}
+
+function CurrentlyPlaying({ game, gameid, theme: t }) {
+  if (!game) return null;
+  const bannerUrl = gameid ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${gameid}/header.jpg` : null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="relative overflow-hidden rounded-2xl border"
+      style={{ borderColor: '#22c55e40', background: 'rgba(34,197,94,0.04)' }}
+    >
+      {bannerUrl && (
+        <div className="absolute inset-0">
+          <img src={bannerUrl} alt="" className="w-full h-full object-cover opacity-10"
+            onError={e => e.target.style.display = 'none'} />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, rgba(2,10,2,0.95), rgba(2,10,2,0.7))' }} />
+        </div>
+      )}
+      <div className="relative z-10 flex items-center gap-4 px-5 py-3.5">
+        <div className="relative flex-shrink-0">
+          <span className="status-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-green-400 opacity-60" />
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-400" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[9px] font-mono uppercase tracking-[0.2em] text-green-400/70 mb-0.5">Jogando agora</p>
+          <p className="text-sm font-bold text-green-300 truncate">{game}</p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+export default function PublicProfile() {
   const { slug } = useParams();
-  const [profileData, setProfileData] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Limpa e normaliza o slug recebido pela URL para evitar problemas de digitação
-    const cleanSlug = slug ? slug.toLowerCase().trim() : '';
-
-    axios.get(`${API_BASE_URL}/api/profile/public/${cleanSlug}`)
+    const clean = slug ? slug.toLowerCase().trim() : '';
+    axios.get(`${API}/api/profile/public/${clean}`)
       .then(res => {
-        if (res.data.success && res.data.profile) {
-          setProfileData(res.data.profile);
-        } else {
-          setError(res.data.message || 'Perfil não encontrado na Matrix.');
-        }
-        setLoading(false); // Corrigido de 'loading(false)' para 'setLoading(false)'
+        if (res.data.success && res.data.profile) setProfile(res.data.profile);
+        else setError(res.data.message || 'Perfil não encontrado.');
+        setLoading(false);
       })
-      .catch((err) => {
-        console.error("Erro na requisição pública:", err);
-        setError(err.response?.data?.message || 'Erro ao conectar com o servidor da vitrine.');
+      .catch(err => {
+        setError(err.response?.data?.message || 'Erro ao conectar com o servidor.');
         setLoading(false);
       });
   }, [slug]);
 
-  // Configuração de cores dinâmicas e efeitos visuais baseados no tema ativo
-  const themeStyles = {
-    cyberpunk: {
-      card: "border-blue-500/30 shadow-blue-950/20",
-      line: "from-transparent via-blue-500 to-transparent",
-      text: "text-blue-400",
-      glow: "from-blue-500 to-indigo-500"
-    },
-    goth: {
-      card: "border-purple-900/50 shadow-none",
-      line: "from-transparent via-purple-800 to-transparent",
-      text: "text-purple-500",
-      glow: "from-purple-900 to-zinc-800"
-    },
-    vaporwave: {
-      card: "border-pink-500/30 shadow-pink-950/10",
-      line: "from-transparent via-pink-500 to-transparent",
-      text: "text-pink-400",
-      glow: "from-pink-500 to-purple-500"
-    },
-    matrix: {
-      card: "border-green-500/30 shadow-green-950/20",
-      line: "from-transparent via-green-500 to-transparent",
-      text: "text-green-400",
-      glow: "from-green-500 to-emerald-600"
-    },
-    blood: {
-      card: "border-red-600/30 shadow-red-950/20",
-      line: "from-transparent via-red-600 to-transparent",
-      text: "text-red-500",
-      glow: "from-red-600 to-rose-700"
-    }
-  };
-
   if (loading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#0a0a0c]">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-t-transparent border-blue-500"></div>
+      <div className="flex h-screen w-screen items-center justify-center bg-[#050508]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative w-9 h-9">
+            <div className="absolute inset-0 rounded-full border border-white/5" />
+            <div className="absolute inset-0 rounded-full border-t border-white/30 animate-spin" />
+          </div>
+          <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-white/20">Carregando</span>
+        </div>
       </div>
     );
   }
 
-  if (error || !profileData) {
+  if (error || !profile) {
     return (
-      <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#0a0a0c] text-red-400 p-4 text-center font-mono">
-        <h1 className="text-2xl font-black mb-2">404 // MATRIX_ERROR</h1>
-        <p className="text-sm text-slate-400 mb-6">{error || 'Dados inválidos recebidos do servidor.'}</p>
-        <Link to="/" className="text-xs bg-slate-900 border border-slate-800 hover:border-slate-700 px-4 py-2 rounded-lg text-slate-300 transition-all">
-          [ Voltar ao Início ]
+      <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#050508] p-4 text-center">
+        <p className="text-5xl mb-5 select-none">☁️</p>
+        <h1 className="text-2xl font-black font-display text-white mb-2">Perfil não encontrado</h1>
+        <p className="text-sm text-slate-500 mb-8 max-w-sm">{error}</p>
+        <Link to="/" className="text-xs border px-4 py-2 rounded-lg transition-all font-mono"
+          style={{ borderColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)' }}
+          onMouseEnter={e => e.target.style.color = '#fff'}
+          onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.4)'}
+        >
+          ← Voltar ao início
         </Link>
       </div>
     );
   }
 
-  // Define o estilo ativo garantindo fallback caso o tema vindo do banco não exista
-  const activeStyle = themeStyles[profileData.theme] || themeStyles.cyberpunk;
+  const baseTheme = getTheme(profile.theme);
+  const effectiveAccent = profile.accent_color || null;
+  const t = effectiveAccent ? {
+    ...baseTheme,
+    primary: effectiveAccent,
+    accent: effectiveAccent,
+    textAccent: effectiveAccent,
+    glowColor: hexToRgb(effectiveAccent) || baseTheme.glowColor,
+    headerLine: `linear-gradient(90deg, transparent, ${effectiveAccent}, transparent)`,
+  } : baseTheme;
+
+  const bgEffect   = profile.bg_effect || 'none';
+  const avatarFrame = profile.avatar_frame || 'none';
+  const cardStyle  = profile.card_style || 'default';
+  const layout     = profile.layout_style || 'standard';
+  const isPlaying  = profile.personastate >= 1 && !!profile.gameextrainfo;
+  const bgClass    = bgEffect === 'scanlines' ? 'bg-scanlines' : bgEffect === 'crt' ? 'bg-crt' : '';
+  const maxWidth   = layout === 'wide' ? 'max-w-3xl' : layout === 'compact' ? 'max-w-lg' : 'max-w-2xl';
+
+  const cardClass = cardStyle === 'glass' ? 'card-style-glass'
+    : cardStyle === 'minimal' ? 'card-style-minimal'
+    : cardStyle === 'solid' ? 'card-style-solid'
+    : '';
 
   return (
-    <div className="min-h-screen bg-[#0a0a0c] text-slate-100 font-sans p-6 md:p-12 flex flex-col items-center justify-center">
-      <div className="w-full max-w-2xl space-y-6">
-        
-        {/* CARD PRINCIPAL COM TEMA DINÂMICO */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
+    <div className={`min-h-screen relative ${bgClass}`} style={{ background: t.bg }}>
+      <BackgroundEffect type={bgEffect} theme={t} customBgUrl={profile.custom_bg_url} />
+
+      <div className="absolute top-0 left-0 right-0 h-px" style={{ background: t.headerLine }} />
+
+      {/* PROFILE BANNER (VIP) */}
+      {profile.profile_banner_url && (
+        <div className="relative w-full h-40 sm:h-52 overflow-hidden">
+          <img
+            src={profile.profile_banner_url}
+            alt=""
+            className="w-full h-full object-cover"
+            onError={e => e.target.parentElement.style.display = 'none'}
+          />
+          <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 40%, ${t.bg} 100%)` }} />
+        </div>
+      )}
+
+      <div className={`relative z-10 ${maxWidth} mx-auto px-4 py-12 space-y-8`}>
+
+        {/* HERO */}
+        <motion.section
+          initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`relative overflow-hidden bg-gradient-to-b from-[#14141b] to-[#0d0d11] border rounded-2xl p-6 shadow-2xl transition-all duration-300 ${activeStyle.card}`}
+          transition={{ duration: 0.5 }}
+          className={layout === 'centered' ? 'text-center' : ''}
         >
-          <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${activeStyle.line}`} />
-          
-          <div className="flex flex-col sm:flex-row items-center gap-6">
-            <div className="relative group">
-              <div className={`absolute -inset-0.5 bg-gradient-to-r ${activeStyle.glow} rounded-xl blur opacity-60`} />
-              <img 
-                src={profileData.avatar || 'https://via.placeholder.com/150'} 
-                alt="Profile Avatar" 
-                className="relative w-24 h-24 rounded-xl object-cover border border-black"
-              />
+          <div className={`flex ${layout === 'centered' ? 'flex-col items-center' : 'flex-col sm:flex-row items-center sm:items-start'} gap-6`}>
+            <div className={layout !== 'centered' ? 'flex-shrink-0' : ''}>
+              <div style={{ '--glow': `rgba(${t.glowColor}, 0.5)`, '--frame-color': t.primary }}>
+                <AvatarDisplay
+                  src={profile.avatar}
+                  frame={avatarFrame}
+                  theme={t}
+                  size={layout === 'compact' ? 80 : 104}
+                />
+              </div>
             </div>
 
-            <div className="text-center sm:text-left flex-1">
-              <h2 className="text-2xl font-black text-white tracking-wide font-mono">{profileData.nickname || 'Usuário'}</h2>
-              <p className={`text-xs font-mono mt-1 ${activeStyle.text}`}>USER PROFILE // VERIFIED</p>
-              
-              <div className="flex flex-wrap justify-center sm:justify-start gap-4 mt-4">
-                <div className="bg-[#171721] border border-slate-800 px-3 py-1.5 rounded-lg text-center min-w-[70px]">
-                  <span className="block text-[10px] uppercase tracking-wider text-slate-500 font-bold">Nível</span>
-                  <span className={`text-sm font-black font-mono ${activeStyle.text}`}>{profileData.level ?? 0}</span>
+            <div className={`flex-1 min-w-0 ${layout === 'centered' ? 'text-center' : ''}`}>
+              <h1 className="text-3xl sm:text-4xl font-black font-display tracking-wide leading-tight" style={{ color: t.textPrimary }}>
+                {profile.nickname}
+              </h1>
+
+              {profile.show_status !== false && (
+                <div className={`mt-2 ${layout === 'centered' ? 'flex justify-center' : ''}`}>
+                  <StatusBadge personastate={profile.personastate} gameextrainfo={profile.gameextrainfo} accentColor={t.primary} />
                 </div>
-                <div className="bg-[#171721] border border-slate-800 px-3 py-1.5 rounded-lg text-center">
-                  <span className="block text-[10px] uppercase tracking-wider text-slate-500 font-bold">Membro desde</span>
-                  <span className="text-sm font-medium text-slate-300 font-mono">
-                    {profileData.timeCreated ? new Date(profileData.timeCreated * 1000).toLocaleDateString('pt-BR') : 'N/A'}
-                  </span>
-                </div>
+              )}
+
+              {profile.bio && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="mt-3 text-sm leading-relaxed italic max-w-md"
+                  style={{ color: t.textSecondary }}
+                >
+                  "{profile.bio}"
+                </motion.p>
+              )}
+
+              <div className={`flex flex-wrap gap-3 mt-4 ${layout === 'centered' ? 'justify-center' : ''}`}>
+                <StatPill label="Nível Steam" value={profile.level ?? 0} theme={t} />
+                <StatPill label="Membro desde" value={profile.timeCreated ? new Date(profile.timeCreated * 1000).getFullYear() : 'N/A'} theme={t} />
+                {profile.show_total_games !== false && profile.totalGames > 0 && (
+                  <StatPill label="Jogos" value={profile.totalGames} theme={t} />
+                )}
               </div>
             </div>
           </div>
-        </motion.div>
 
-        {/* VITRINE DE EXIBIÇÃO: SEUS JOGOS EM ALTA ESTÉTICA */}
-        <div className="bg-[#111115] border border-slate-800/80 rounded-2xl p-6">
-          <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 font-mono">// VITRINE_DE_JOGOS_PRINCIPAIS</h4>
-          
-          <div className="space-y-3">
-            {profileData.topGames && profileData.topGames.length > 0 ? (
-              profileData.topGames.map((game, idx) => (
-                <div key={idx} className="flex items-center justify-between bg-[#16161a] border border-slate-800/60 hover:border-slate-700/80 p-3 rounded-xl transition-all">
-                  <div className="flex items-center gap-3">
-                    {game.iconUrl && (
-                      <img 
-                        src={game.iconUrl} 
-                        alt="" 
-                        className="w-8 h-8 rounded bg-zinc-900 object-cover"
-                        onError={(e) => { e.target.style.display = 'none'; }}
-                      />
-                    )}
-                    <span className="text-sm font-medium text-slate-200 font-mono">{game.name}</span>
-                  </div>
-                  <div className="text-right font-mono">
-                    <span className={`text-xs font-bold ${activeStyle.text}`}>{game.playtime} hrs</span>
-                    <span className="block text-[9px] text-slate-600 uppercase tracking-tighter">Registradas</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="h-24 border border-dashed border-slate-800 rounded-xl flex items-center justify-center text-xs text-slate-500 text-center px-4">
-                Nenhum jogo público localizado. Certifique-se de que seus detalhes de jogos na Steam não estão privados!
-              </div>
-            )}
-          </div>
-        </div>
+          {/* Currently playing */}
+          {isPlaying && (
+            <div className="mt-5">
+              <CurrentlyPlaying game={profile.gameextrainfo} gameid={profile.gameid} theme={t} />
+            </div>
+          )}
+        </motion.section>
 
-        <div className="text-center">
-          <Link to="/" className="text-xs text-slate-500 hover:text-blue-400 transition-colors font-mono">
-            [ Crie sua própria vitrine no SteamPFP ]
+        {/* GOTY */}
+        {profile.goty && (
+          <GotySection goty={profile.goty} theme={t} />
+        )}
+
+        {/* GAMES */}
+        {profile.topGames && profile.topGames.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <div className="text-xs font-mono font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2"
+              style={{ color: t.textSecondary }}>
+              <span style={{ color: t.primary }}>//</span>
+              {profile.topGames.length === 1 ? 'Jogo em Destaque' : 'Jogos em Destaque'}
+            </div>
+            <GameBentoGrid games={profile.topGames} theme={t} hideHours={profile.hide_hours} cardClass={cardClass} />
+          </motion.section>
+        )}
+
+        {/* ACHIEVEMENTS */}
+        {profile.show_achievements !== false && profile.achievements && profile.achievements.length > 0 && (
+          <AchievementsSection achievements={profile.achievements} gameName={profile.achievementsGame} theme={t} />
+        )}
+
+        {/* FOOTER */}
+        <motion.footer
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="text-center pt-4 pb-8"
+        >
+          <div className="h-px mb-6" style={{ background: `linear-gradient(90deg, transparent, ${t.cardBorder}, transparent)` }} />
+          <Link to="/"
+            className="text-xs font-mono transition-colors"
+            style={{ color: t.textSecondary }}
+            onMouseEnter={e => e.target.style.color = t.textAccent}
+            onMouseLeave={e => e.target.style.color = t.textSecondary}
+          >
+            Crie sua vitrine em SteamPFP →
           </Link>
-        </div>
+        </motion.footer>
       </div>
+
+      {profile.music_url && <MusicPlayer musicUrl={profile.music_url} theme={t} />}
     </div>
   );
 }
 
-export default PublicProfile;
+function hexToRgb(hex) {
+  if (!hex || !hex.startsWith('#')) return null;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
+  return `${r}, ${g}, ${b}`;
+}

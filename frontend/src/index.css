@@ -1,9 +1,190 @@
 @import "tailwindcss";
 
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
 body {
   margin: 0;
-  background-color: #0a0a0c;
-  color: #f3f4f6;
-  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: #050508;
+  color: #f1f5f9;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+.font-mono { font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace !important; }
+.font-display { font-family: 'Rajdhani', 'Inter', sans-serif !important; }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ======================== SCANLINES ======================== */
+.bg-scanlines::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.07) 2px,rgba(0,0,0,0.07) 4px);
+  pointer-events: none; z-index: 100;
+}
+/* ======================== CRT ======================== */
+.bg-crt::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg,transparent,transparent 1px,rgba(0,0,0,0.1) 1px,rgba(0,0,0,0.1) 2px);
+  pointer-events: none; z-index: 100;
+  animation: crt-flicker 0.18s infinite;
+}
+@keyframes crt-flicker {
+  0%,100% { opacity: 1; } 50% { opacity: 0.97; }
+}
+
+/* ======================== AVATAR FRAMES ======================== */
+.avatar-frame-none    { border-radius: 12px; }
+.avatar-frame-glow    { border-radius: 12px; animation: neon-glow-pulse 2.5s ease-in-out infinite; }
+.avatar-frame-pulse   { border-radius: 50%; animation: avatar-pulse 2s ease-in-out infinite; }
+
+@keyframes neon-glow-pulse {
+  0%,100% { box-shadow: 0 0 8px 2px var(--glow); }
+  50% { box-shadow: 0 0 22px 7px var(--glow); }
+}
+@keyframes avatar-pulse {
+  0%,100% { box-shadow: 0 0 0 0 var(--glow); }
+  50% { box-shadow: 0 0 0 10px rgba(0,0,0,0); }
+}
+
+.avatar-frame-ring-spin,
+.avatar-frame-fire,
+.avatar-frame-ice,
+.avatar-frame-rainbow,
+.avatar-frame-diamond,
+.avatar-frame-glitch { position: relative; }
+
+.avatar-frame-ring-spin { border-radius: 50%; }
+.avatar-frame-ring-spin::before {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0%, var(--frame-color, #00d4ff) 50%, transparent 100%);
+  animation: ring-spin 1.5s linear infinite; z-index: -1;
+}
+.avatar-frame-fire { border-radius: 12px; }
+.avatar-frame-fire::before {
+  content: ''; position: absolute; inset: -3px; border-radius: 14px;
+  background: conic-gradient(from 0deg, #ff6000,#ff9500,#ffcc00,#ff4500,#ff0000,#ff6000);
+  animation: ring-spin 2s linear infinite; z-index: -1;
+}
+.avatar-frame-ice { border-radius: 12px; }
+.avatar-frame-ice::before {
+  content: ''; position: absolute; inset: -3px; border-radius: 14px;
+  background: conic-gradient(from 0deg, #a8d8ea,#00bcd4,#e0f7fa,#4fc3f7,#a8d8ea);
+  animation: ring-spin 3s linear infinite; z-index: -1;
+}
+.avatar-frame-rainbow { border-radius: 50%; }
+.avatar-frame-rainbow::before {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%;
+  background: conic-gradient(from 0deg, #ff0000,#ff7700,#ffff00,#00ff00,#0000ff,#8b00ff,#ff0000);
+  animation: ring-spin 2s linear infinite; z-index: -1;
+}
+.avatar-frame-glitch { border-radius: 8px; animation: glitch-anim 4s infinite; }
+@keyframes glitch-anim {
+  0%,88%,100% { transform: translate(0); filter: none; }
+  90% { transform: translate(-2px,1px); filter: hue-rotate(90deg) saturate(2); }
+  92% { transform: translate(2px,-1px); filter: hue-rotate(180deg); }
+  94% { transform: translate(-1px,2px); filter: hue-rotate(270deg) saturate(3); }
+}
+.avatar-frame-diamond { border-radius: 12px; }
+.avatar-frame-diamond::before {
+  content: ''; position: absolute; inset: -3px; border-radius: 14px;
+  background: conic-gradient(from 0deg, #b9f2ff,#e0f7fa,#80deea,#4dd0e1,#b2ebf2,#e0f2f1,#b9f2ff);
+  animation: ring-spin 4s linear infinite; z-index: -1;
+}
+@keyframes ring-spin { to { transform: rotate(360deg); } }
+
+/* ======================== STATUS ======================== */
+@keyframes status-ping {
+  0% { transform: scale(1); opacity: 1; }
+  75%,100% { transform: scale(2.5); opacity: 0; }
+}
+.status-ping { animation: status-ping 1.5s cubic-bezier(0,0,0.2,1) infinite; }
+
+/* ======================== PARTICLES ======================== */
+@keyframes particle-float {
+  0%,100% { transform: translateY(0) translateX(0); opacity: 0.3; }
+  33% { transform: translateY(-30px) translateX(10px); opacity: 0.7; }
+  66% { transform: translateY(-15px) translateX(-8px); opacity: 0.4; }
+}
+
+/* ======================== HOLOGRAPHIC ======================== */
+@keyframes holo-shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.holo-text {
+  background: linear-gradient(90deg, #a78bfa, #38bdf8, #ec4899, #a78bfa);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: holo-shimmer 4s ease infinite;
+}
+
+/* ======================== VIP ======================== */
+@keyframes vip-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.vip-badge-shine {
+  background: linear-gradient(90deg, #d97706, #fbbf24, #d97706);
+  background-size: 200% auto;
+  animation: vip-shimmer 3s linear infinite;
+}
+
+/* ======================== GLASS ======================== */
+.glass {
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* ======================== GAME CARD ======================== */
+.game-card-hover { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.game-card-hover:hover { transform: translateY(-3px) scale(1.01); }
+
+/* ======================== AURORA ======================== */
+@keyframes aurora-move {
+  0%,100% { transform: scale(1) translate(0,0); opacity: 0.25; }
+  33% { transform: scale(1.1) translate(20px,-20px); opacity: 0.4; }
+  66% { transform: scale(0.9) translate(-15px,15px); opacity: 0.3; }
+}
+
+/* ======================== LANDING SCROLL INDICATOR ======================== */
+@keyframes scroll-bounce {
+  0%,100% { transform: translateY(0); opacity: 0.4; }
+  50% { transform: translateY(6px); opacity: 0.9; }
+}
+.scroll-bounce { animation: scroll-bounce 2s ease-in-out infinite; }
+
+/* ======================== CARD STYLES ======================== */
+.card-style-glass {
+  background: rgba(255,255,255,0.03) !important;
+  backdrop-filter: blur(20px);
+}
+.card-style-minimal {
+  background: transparent !important;
+  border-color: rgba(255,255,255,0.06) !important;
+}
+.card-style-solid {
+  background: rgba(0,0,0,0.6) !important;
+}
+
+/* ======================== LANDING ======================== */
+@keyframes fade-slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up { animation: fade-slide-up 0.8s ease forwards; }
+.animate-delay-1 { animation-delay: 0.3s; opacity: 0; }
+.animate-delay-2 { animation-delay: 0.6s; opacity: 0; }
+.animate-delay-3 { animation-delay: 0.9s; opacity: 0; }
+.animate-delay-4 { animation-delay: 1.2s; opacity: 0; }

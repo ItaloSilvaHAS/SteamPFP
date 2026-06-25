@@ -7,300 +7,364 @@ import cors from 'cors';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
-// Carrega as variáveis de ambiente do arquivo .env
 dotenv.config();
 
 const app = express();
-
-// IMPORTANTE PARA DEPLOY: Hugging Face Spaces e Replit exigem process.env.PORT
 const PORT = process.env.PORT || 5000;
 
-// Configuração obrigatória para rodar atrás de proxies reversos na nuvem (Hugging Face / Cloudflare / Vercel)
 app.set('trust proxy', 1);
 
-// ==========================================
-// 1. CONFIGURAÇÕES INICIAIS (MIDDLEWARES)
-// ==========================================
-
-// Permite que o frontend (Vercel) acesse o backend sem problemas de CORS
 const allowedOrigins = [process.env.CLIENT_URL, 'http://localhost:5173', 'http://localhost:3000'];
 app.use(cors({
-    origin: function (origin, callback) {
-        // Permite requisições sem origem (como aplicativos mobile ou curl) ou que estejam na lista permitida
-        if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
-            callback(null, true);
-        } else {
-            callback(new Error('Bloqueado pelo CORS do CyberSteam'));
-        }
-    },
-    credentials: true
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') cb(null, true);
+    else cb(new Error('CORS bloqueado'));
+  },
+  credentials: true,
 }));
 
 app.use(express.json());
-
-// Configuração da sessão adaptada para HTTPS/Nuvem de forma segura
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'cybersteam_secret_key_123',
-    resave: false, 
-    saveUninitialized: false, 
-    cookie: {
-        maxAge: 24 * 60 * 60 * 1000, // Mantém logado por 1 dia
-        httpOnly: true, 
-        // Se estiver rodando em ambiente de produção (HTTPS), ajusta os parâmetros para evitar rejeição de cookie cross-site
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', 
-        secure: process.env.NODE_ENV === 'production' // Ativa true automaticamente se estiver na nuvem com HTTPS
-    }
+  secret: process.env.SESSION_SECRET || 'steampfp_dev_secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  },
 }));
 
-// Inicializa o Passport no servidor
 app.use(passport.initialize());
 app.use(passport.session());
-
-// Serialization do usuário para a sessão
-passport.serializeUser((user, done) => {
-    done(null, user);
-});
-
-passport.deserializeUser((obj, done) => {
-    done(null, obj);
-});
-
-// ==========================================
-// 2. CONFIGURAÇÃO DO PASSPORT STEAM (OPENID + SUPABASE)
-// ==========================================
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(null, obj));
 
 const SERVER_URL = process.env.SERVER_URL || `http://localhost:${PORT}`;
 
 passport.use(new SteamStrategy({
-    returnURL: `${SERVER_URL}/api/auth/steam/return`,
-    realm: SERVER_URL,
-    apiKey: process.env.STEAM_API_KEY
+  returnURL: `${SERVER_URL}/api/auth/steam/return`,
+  realm: SERVER_URL,
+  apiKey: process.env.STEAM_API_KEY,
 }, async (identifier, profile, done) => {
-    try {
-        const steamId = profile.id;
-        const nickname = profile.displayName;
-        const avatar = profile.photos?.[2]?.value || profile.photos?.[0]?.value || '';
+  try {
+    const steamId = profile.id;
+    const nickname = profile.displayName;
+    const avatar = profile.photos?.[2]?.value || profile.photos?.[0]?.value || '';
 
-        // Cria um slug limpo
-        const defaultSlug = nickname.toLowerCase()
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "") 
-            .replace(/[^a-z0-9_]/g, '_')     
-            .replace(/_+/g, '_')            
-            .replace(/^_+|_+$/g, '');        
+    const defaultSlug = nickname.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
 
-        // Salva ou atualiza os dados no schema público (CORRIGIDO: Sem .usingAnonymously())
-        const { error } = await supabase
-            .schema('public')
-            .from('profiles')
-            .upsert({ 
-                id: steamId, 
-                nickname: nickname, 
-                avatar: avatar,
-                custom_slug: defaultSlug || `user_${steamId.slice(-6)}` 
-            }, { onConflict: 'id' });
+    const { data: existing } = await supabase.schema('public').from('profiles')
+      .select('custom_slug').eq('id', steamId).single();
 
-        if (error) {
-            console.error("❌ Erro ao persistir dados no Supabase:", error.message);
-        } else {
-            console.log(`✅ Usuário ${nickname} sincronizado com o banco de dados!`);
-        }
+    await supabase.schema('public').from('profiles').upsert({
+      id: steamId,
+      nickname,
+      avatar,
+      custom_slug: existing?.custom_slug || defaultSlug || `user_${steamId.slice(-6)}`,
+    }, { onConflict: 'id' });
 
-        profile.identifier = identifier;
-        return done(null, profile);
-    } catch (err) {
-        console.error("❌ Erro interno no processo de sincronização de login:", err.message);
-        return done(err, null);
-    }
+    profile.identifier = identifier;
+    return done(null, profile);
+  } catch (err) {
+    return done(err, null);
+  }
 }));
 
 // ==========================================
-// 3. ROTAS DE AUTENTICAÇÃO (LOGIN / LOGOUT)
+// AUTH
 // ==========================================
 
 app.get('/api/auth/steam', passport.authenticate('steam', { failureRedirect: '/' }), (req, res) => {});
 
-app.get('/api/auth/steam/return', passport.authenticate('steam', { failureRedirect: '/' }), (req, res) => {
-    const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
-    res.redirect(CLIENT_URL);
-});
+app.get('/api/auth/steam/return',
+  passport.authenticate('steam', { failureRedirect: '/' }),
+  (req, res) => res.redirect(process.env.CLIENT_URL || 'http://localhost:5173')
+);
 
 app.get('/api/auth/user', (req, res) => {
-    if (req.isAuthenticated()) {
-        res.json({
-            success: true,
-            user: req.user
-        });
-    } else {
-        res.status(401).json({
-            success: false,
-            message: "Usuário não autenticado."
-        });
-    }
+  if (req.isAuthenticated()) res.json({ success: true, user: req.user });
+  else res.status(401).json({ success: false });
 });
 
 app.get('/api/auth/logout', (req, res) => {
-    req.logout(() => {
-        const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
-        res.redirect(CLIENT_URL);
-    });
+  req.logout(() => res.redirect(process.env.CLIENT_URL || 'http://localhost:5173'));
 });
 
 // ==========================================
-// 4. ROTA PARA SALVAR CUSTOMIZAÇÕES DO PERFIL
+// PROFILE/ME — fresh from Supabase (fixes state persistence)
 // ==========================================
+
+app.get('/api/profile/me', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ success: false });
+
+  const { data, error } = await supabase.schema('public').from('profiles')
+    .select('id, nickname, avatar, custom_slug, theme, bio, bg_effect, avatar_frame, music_url, is_vip, featured_games, goty_appid, goty_note, show_achievements, show_status, hide_hours, card_style, layout_style, profile_banner_url, accent_color, show_total_games')
+    .eq('id', req.user.id).single();
+
+  if (error || !data) return res.status(404).json({ success: false, message: 'Perfil não encontrado.' });
+  res.json({ success: true, profile: data });
+});
+
+// ==========================================
+// SALVAR CUSTOMIZAÇÕES
+// ==========================================
+
 app.post('/api/profile/save', async (req, res) => {
-    if (!req.isAuthenticated()) {
-        return res.status(401).json({ success: false, message: "Não autorizado." });
+  if (!req.isAuthenticated()) return res.status(401).json({ success: false, message: 'Não autorizado.' });
+
+  const steamId = req.user.id;
+  const {
+    theme, custom_slug, bio, bg_effect, avatar_frame, music_url,
+    featured_games, goty_appid, goty_note,
+    show_achievements, show_status, hide_hours,
+    card_style, layout_style, profile_banner_url, accent_color, show_total_games,
+  } = req.body;
+
+  if (!custom_slug) return res.status(400).json({ success: false, message: 'Slug obrigatório.' });
+
+  const cleanSlug = custom_slug.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+
+  const updateData = {
+    id: steamId,
+    custom_slug: cleanSlug,
+    nickname: req.user.displayName || '',
+    avatar: req.user.photos?.[2]?.value || req.user.photos?.[0]?.value || '',
+  };
+
+  const optionalFields = {
+    theme, bio, bg_effect, avatar_frame, music_url,
+    featured_games: featured_games ? JSON.stringify(featured_games) : undefined,
+    goty_appid, goty_note,
+    show_achievements, show_status, hide_hours,
+    card_style, layout_style, profile_banner_url, accent_color, show_total_games,
+  };
+
+  Object.entries(optionalFields).forEach(([k, v]) => {
+    if (v !== undefined) updateData[k] = v;
+  });
+
+  try {
+    const { error } = await supabase.schema('public').from('profiles')
+      .upsert(updateData, { onConflict: 'id' });
+
+    if (error) {
+      if (error.code === '23505' || error.message?.includes('profiles_custom_slug_key')) {
+        return res.status(400).json({ success: false, message: 'Este link já está em uso por outro jogador!' });
+      }
+      throw error;
     }
 
-    const steamId = req.user.id;
-    const { theme, custom_slug } = req.body;
-
-    if (!theme || !custom_slug) {
-        return res.status(400).json({ success: false, message: "Dados incompletos." });
-    }
-
-    const cleanSlug = custom_slug.toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9_]/g, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_+|_+$/g, '');
-
-    try {
-        const { error } = await supabase
-            .schema('public')
-            .from('profiles')
-            .upsert({ 
-                id: steamId,
-                theme: theme, 
-                custom_slug: cleanSlug,
-                nickname: req.user.displayName || '',
-                avatar: req.user.photos?.[2]?.value || req.user.photos?.[0]?.value || ''
-            }, { onConflict: 'id' });
-
-        if (error) {
-            if (error.code === '23505' || error.message?.includes('profiles_custom_slug_key')) { 
-                return res.status(400).json({ 
-                    success: false, 
-                    message: "Este link personalizado já está sendo usado por outro jogador!" 
-                });
-            }
-            throw error;
-        }
-
-        res.json({ success: true, message: "Customização salva com sucesso!", actual_slug: cleanSlug });
-
-    } catch (error) {
-        console.error("❌ Erro ao salvar customização:", error.message);
-        res.status(500).json({ success: false, message: "Erro interno ao salvar no banco de dados." });
-    }
+    res.json({ success: true, message: 'Salvo!', actual_slug: cleanSlug });
+  } catch (err) {
+    console.error('Erro ao salvar:', err.message);
+    res.status(500).json({ success: false, message: 'Erro interno ao salvar.' });
+  }
 });
 
 // ==========================================
-// 5. ROTA DE CONSUMO DIRETO DA STEAM API
+// STEAM DATA (DASHBOARD)
 // ==========================================
+
 app.get('/api/steam/profile/:steamId', async (req, res) => {
-    const { steamId } = req.params;
-    const apiKey = process.env.STEAM_API_KEY;
+  const { steamId } = req.params;
+  const key = process.env.STEAM_API_KEY;
+  try {
+    const [pRes, lRes] = await Promise.all([
+      axios.get(`https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${key}&steamids=${steamId}`),
+      axios.get(`https://api.steampowered.com/IPlayerService/GetSteamLevel/v1/?key=${key}&steamid=${steamId}`),
+    ]);
+    const p = pRes.data.response.players[0];
+    res.json({
+      success: true,
+      data: {
+        nickname: p.personaname,
+        avatar: p.avatarfull,
+        profileUrl: p.profileurl,
+        timeCreated: p.timecreated,
+        level: lRes.data.response.player_level,
+        personastate: p.personastate,
+        gameextrainfo: p.gameextrainfo || null,
+        gameid: p.gameid || null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Erro ao obter dados da Steam.' });
+  }
+});
 
-    try {
-        const profileResponse = await axios.get(`https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${apiKey}&steamids=${steamId}`);
-        const levelResponse = await axios.get(`https://api.steampowered.com/IPlayerService/GetSteamLevel/v1/?key=${apiKey}&steamid=${steamId}`);
-
-        const profileData = profileResponse.data.response.players[0];
-        const levelData = levelResponse.data.response.player_level;
-
-        res.json({
-            success: true,
-            data: {
-                nickname: profileData.personaname,
-                avatar: profileData.avatarfull,
-                profileUrl: profileData.profileurl,
-                timeCreated: profileData.timecreated,
-                level: levelData
-            }
-        });
-
-    } catch (error) {
-        console.error("Erro ao consumir a API da Steam:", error.message);
-        res.status(500).json({
-            success: false,
-            message: "Erro ao obter dados do perfil da Steam."
-        });
-    }
+// Biblioteca completa do usuário (para seletor de jogos)
+app.get('/api/steam/games/:steamId', async (req, res) => {
+  if (!req.isAuthenticated() || req.user.id !== req.params.steamId) {
+    return res.status(401).json({ success: false, message: 'Não autorizado.' });
+  }
+  const key = process.env.STEAM_API_KEY;
+  try {
+    const gRes = await axios.get(
+      `https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=${key}&steamid=${req.params.steamId}&format=json&include_appinfo=true&include_played_free_games=true`
+    );
+    const games = (gRes.data.response.games || [])
+      .sort((a, b) => b.playtime_forever - a.playtime_forever)
+      .map(g => ({
+        appId: g.appid,
+        name: g.name,
+        playtime: Math.round(g.playtime_forever / 60),
+        iconUrl: g.img_icon_url
+          ? `https://media.steampowered.com/steamcommunity/public/images/apps/${g.appid}/${g.img_icon_url}.jpg`
+          : null,
+        headerUrl: `https://cdn.cloudflare.steamstatic.com/steam/apps/${g.appid}/header.jpg`,
+      }));
+    res.json({ success: true, games });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Erro ao buscar biblioteca.' });
+  }
 });
 
 // ==========================================
-// 6. ROTA PÚBLICA: BUSCAR PERFIL + JOGOS + CONQUISTAS
+// PERFIL PÚBLICO
 // ==========================================
+
 app.get('/api/profile/public/:slug', async (req, res) => {
-    const { slug } = req.params;
-    const apiKey = process.env.STEAM_API_KEY;
+  const { slug } = req.params;
+  const key = process.env.STEAM_API_KEY;
 
-    try {
-        const { data: profile, error } = await supabase
-            .schema('public')
-            .from('profiles')
-            .select('id, nickname, avatar, theme, custom_slug')
-            .eq('custom_slug', slug)
-            .single();
+  try {
+    const { data: profile, error } = await supabase.schema('public').from('profiles')
+      .select('id, nickname, avatar, theme, custom_slug, bio, bg_effect, avatar_frame, music_url, is_vip, featured_games, goty_appid, goty_note, show_achievements, show_status, hide_hours, card_style, layout_style, profile_banner_url, accent_color, show_total_games')
+      .eq('custom_slug', slug).single();
 
-        if (error || !profile) {
-            return res.status(404).json({ 
-                success: false, 
-                message: "Jogador não encontrado no banco de dados do CyberSteam." 
-            });
-        }
-
-        const steamId = profile.id;
-
-        const [profileResponse, levelResponse, gamesResponse] = await Promise.all([
-            axios.get(`https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${apiKey}&steamids=${steamId}`),
-            axios.get(`https://api.steampowered.com/IPlayerService/GetSteamLevel/v1/?key=${apiKey}&steamid=${steamId}`),
-            axios.get(`https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=${apiKey}&steamid=${steamId}&format=json&include_appinfo=true&include_played_free_games=true`)
-        ]);
-
-        const steamData = profileResponse.data.response.players[0];
-        const levelData = levelResponse.data.response.player_level;
-        
-        const allGames = gamesResponse.data.response.games || [];
-        const topGames = allGames
-            .sort((a, b) => b.playtime_forever - a.playtime_forever)
-            .slice(0, 5)
-            .map(game => ({
-                appId: game.appid,
-                name: game.name,
-                playtime: Math.round(game.playtime_forever / 60), 
-                iconUrl: `https://media.steampowered.com/steamcommunity/public/images/apps/${game.appid}/${game.img_icon_url}.jpg`
-            }));
-
-        res.json({
-            success: true,
-            profile: {
-                steamId: profile.id,
-                nickname: steamData.personaname,
-                avatar: steamData.avatarfull,
-                profileUrl: steamData.profileurl,
-                level: levelData,
-                timeCreated: steamData.timecreated,
-                theme: profile.theme,
-                custom_slug: profile.custom_slug,
-                topGames: topGames 
-            }
-        });
-
-    } catch (error) {
-        console.error("❌ Erro ao renderizar perfil público:", error.message);
-        res.status(500).json({ 
-            success: false, 
-            message: "Erro interno ao buscar dados públicos do jogador." 
-        });
+    if (error || !profile) {
+      return res.status(404).json({ success: false, message: 'Jogador não encontrado no SteamPFP.' });
     }
+
+    const steamId = profile.id;
+    const featuredIds = profile.featured_games ? JSON.parse(profile.featured_games) : null;
+
+    const [pRes, lRes, gRes] = await Promise.all([
+      axios.get(`https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${key}&steamids=${steamId}`),
+      axios.get(`https://api.steampowered.com/IPlayerService/GetSteamLevel/v1/?key=${key}&steamid=${steamId}`),
+      axios.get(`https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=${key}&steamid=${steamId}&format=json&include_appinfo=true&include_played_free_games=true`),
+    ]);
+
+    const steamData = pRes.data.response.players[0];
+    const level = lRes.data.response.player_level;
+    const allGames = gRes.data.response.games || [];
+    const totalGames = gRes.data.response.game_count || allGames.length;
+
+    const mapGame = g => ({
+      appId: g.appid,
+      name: g.name,
+      playtime: Math.round(g.playtime_forever / 60),
+      iconUrl: g.img_icon_url
+        ? `https://media.steampowered.com/steamcommunity/public/images/apps/${g.appid}/${g.img_icon_url}.jpg`
+        : null,
+      recentHours: g.playtime_2weeks ? Math.round(g.playtime_2weeks / 60) : null,
+    });
+
+    let topGames;
+    if (featuredIds && featuredIds.length > 0) {
+      topGames = featuredIds
+        .map(id => allGames.find(g => String(g.appid) === String(id)))
+        .filter(Boolean)
+        .map(mapGame);
+    } else {
+      const maxGames = profile.is_vip ? 10 : 5;
+      topGames = allGames
+        .sort((a, b) => b.playtime_forever - a.playtime_forever)
+        .slice(0, maxGames)
+        .map(mapGame);
+    }
+
+    // Achievements for featured or most played game
+    let achievements = [];
+    let achievementsGame = null;
+    const achievementsEnabled = profile.show_achievements !== false;
+    if (achievementsEnabled && topGames.length > 0) {
+      const targetAppId = topGames[0].appId;
+      try {
+        const achRes = await axios.get(
+          `https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid=${targetAppId}&key=${key}&steamid=${steamId}`
+        );
+        if (achRes.data.playerstats?.achievements) {
+          const schemaRes = await axios.get(
+            `https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v0002/?key=${key}&appid=${targetAppId}&l=portuguese`
+          ).catch(() => null);
+
+          const schema = schemaRes?.data?.game?.availableGameStats?.achievements || [];
+          const schemaMap = Object.fromEntries(schema.map(a => [a.name, a]));
+
+          achievements = achRes.data.playerstats.achievements
+            .sort((a, b) => b.unlocktime - a.unlocktime)
+            .slice(0, 12)
+            .map(a => {
+              const s = schemaMap[a.apiname] || {};
+              return {
+                name: s.displayName || a.apiname,
+                description: s.description || '',
+                icon: a.achieved ? s.icon : s.icongray,
+                achieved: !!a.achieved,
+              };
+            });
+          achievementsGame = topGames[0].name;
+        }
+      } catch (_) {}
+    }
+
+    // GOTY data
+    let goty = null;
+    if (profile.goty_appid) {
+      const gotyGame = allGames.find(g => String(g.appid) === String(profile.goty_appid));
+      goty = {
+        appId: profile.goty_appid,
+        name: gotyGame?.name || 'Meu GOTY',
+        note: profile.goty_note || null,
+      };
+    }
+
+    res.json({
+      success: true,
+      profile: {
+        steamId,
+        nickname: steamData.personaname,
+        avatar: steamData.avatarfull,
+        profileUrl: steamData.profileurl,
+        level,
+        timeCreated: steamData.timecreated,
+        personastate: steamData.personastate,
+        gameextrainfo: steamData.gameextrainfo || null,
+        gameid: steamData.gameid || null,
+        theme: profile.theme,
+        custom_slug: profile.custom_slug,
+        bio: profile.bio || null,
+        bg_effect: profile.bg_effect || 'none',
+        avatar_frame: profile.avatar_frame || 'none',
+        music_url: profile.music_url || null,
+        is_vip: profile.is_vip || false,
+        card_style: profile.card_style || 'default',
+        layout_style: profile.layout_style || 'standard',
+        profile_banner_url: profile.profile_banner_url || null,
+        accent_color: profile.accent_color || null,
+        show_status: profile.show_status !== false,
+        hide_hours: profile.hide_hours || false,
+        show_total_games: profile.show_total_games !== false,
+        topGames,
+        totalGames,
+        achievements,
+        achievementsGame,
+        goty,
+      },
+    });
+  } catch (err) {
+    console.error('Erro no perfil público:', err.message);
+    res.status(500).json({ success: false, message: 'Erro interno.' });
+  }
 });
 
-// OBRIGATÓRIO PARA CLOUD DEPLOYS: Ouvir em '0.0.0.0'
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Servidor CYBERSTEAM rodando na porta ${PORT}`);
+  console.log(`🚀 SteamPFP Backend na porta ${PORT}`);
 });
