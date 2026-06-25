@@ -3,7 +3,6 @@ import express from 'express';
 import passport from 'passport';
 import { Strategy as SteamStrategy } from 'passport-steam';
 import session from 'express-session';
-import cors from 'cors';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
@@ -14,14 +13,27 @@ const PORT = process.env.PORT || 5000;
 
 app.set('trust proxy', 1);
 
-const allowedOrigins = [process.env.CLIENT_URL, 'http://localhost:5173', 'http://localhost:3000'];
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') cb(null, true);
-    else cb(new Error('CORS bloqueado'));
-  },
-  credentials: true,
-}));
+const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+const isCrossOriginDeploy = clientUrl.startsWith('https://') && !clientUrl.includes('localhost');
+
+const allowedOrigins = [
+  clientUrl,
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean);
+
+// CORS manual — mais confiável atrás do proxy do Hugging Face
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (!origin || allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,Cookie');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 
 app.use(express.json());
 app.use(session({
@@ -31,8 +43,8 @@ app.use(session({
   cookie: {
     maxAge: 7 * 24 * 60 * 60 * 1000,
     httpOnly: true,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    sameSite: isCrossOriginDeploy ? 'none' : 'lax',
+    secure: isCrossOriginDeploy,
   },
 }));
 
