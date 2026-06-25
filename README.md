@@ -1,6 +1,6 @@
 # 🌐 PROJETO: CYBERSTEAM (Codinome)
 > **Status:** Concepção de Arquitetura e MVP (Fase 1)  
-> **Autor:** [Seu Nome] & Gemini (Co-Piloto)  
+> **Autor:** Eu (Ítalo) 
 > **Propósito:** Transformar dados brutos da Steam em uma vitrine de ostentação digital ultra-estética, futurista e altamente customizável.
 
 ---
